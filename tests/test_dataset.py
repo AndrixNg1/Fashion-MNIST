@@ -31,3 +31,15 @@ def test_invalid_validation_size_is_rejected() -> None:
     """A split must leave at least one training sample."""
     with pytest.raises(ValueError):
         create_split_indices(10, 10)
+
+
+def test_external_image_preparation(tmp_path) -> None:
+    """An external image becomes one normalized 28x28 NHWC batch."""
+    Image = pytest.importorskip("PIL.Image")
+    from fashion_cnn.datasets.fashion_mnist import load_external_image
+
+    image_path = tmp_path / "item.png"
+    Image.new("L", (40, 20), color=255).save(image_path)
+    prepared = load_external_image(image_path)
+    assert prepared.shape == (1, 28, 28, 1)
+    assert prepared.dtype == np.float32 and np.all(prepared == 1.0)

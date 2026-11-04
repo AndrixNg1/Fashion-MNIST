@@ -46,6 +46,26 @@ def normalise_images(images: np.ndarray) -> np.ndarray:
     return images.astype(np.float32) / 127.5 - 1.0
 
 
+def load_external_image(image_path: Path, invert: bool = False) -> np.ndarray:
+    """Prepare one external image as a normalized 28x28 NHWC batch.
+
+    Fashion-MNIST images conventionally show a light item on a dark background.
+    Set ``invert`` for a dark item photographed on a light background.
+    """
+    try:
+        from PIL import Image, ImageOps
+    except ImportError as exc:
+        raise RuntimeError("Pillow is required for image prediction.") from exc
+    if not image_path.is_file():
+        raise FileNotFoundError(f"Image not found: {image_path}")
+    with Image.open(image_path) as source:
+        image = ImageOps.grayscale(source).resize((28, 28), Image.Resampling.LANCZOS)
+        if invert:
+            image = ImageOps.invert(image)
+        pixels = np.asarray(image)
+    return normalise_images(pixels)[np.newaxis, ..., np.newaxis]
+
+
 def create_split_indices(
     size: int = 60_000, validation_size: int = 6_000, seed: int = 42
 ) -> SplitIndices:

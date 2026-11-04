@@ -17,6 +17,8 @@ if str(SOURCE_DIRECTORY) not in sys.path:
 
 from fashion_cnn.config import ExperimentConfig
 from fashion_cnn.datasets.fashion_mnist import (
+    CLASS_NAMES,
+    load_external_image,
     load_pytorch_data,
     load_tensorflow_data,
     plot_dataset_examples,
@@ -132,6 +134,49 @@ def explore(config: ExperimentConfig) -> None:
     print("Saved results/dataset_examples.png")
 
 
+def _print_prediction(logits: np.ndarray, framework: str) -> None:
+    """Display the selected class and its softmax confidence."""
+    shifted = logits[0] - np.max(logits[0])
+    probabilities = np.exp(shifted) / np.exp(shifted).sum()
+    index = int(probabilities.argmax())
+    print(
+        f"{framework} prediction: {CLASS_NAMES[index]} "
+        f"({probabilities[index] * 100:.2f}% confidence)"
+    )
+
+
+def predict_external_image(
+    framework: str, image_path: Path, invert: bool, config: ExperimentConfig
+) -> None:
+    """Load a saved checkpoint and classify one supplied image."""
+    image = load_external_image(image_path, invert)
+    if framework == "pytorch":
+        import torch
+
+        checkpoint = config.results_dir / "pytorch_best.pt"
+        if not checkpoint.exists():
+            raise FileNotFoundError(f"No checkpoint at {checkpoint}. Run train first.")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = PyTorchCNN().to(device)
+        model.load_state_dict(
+            torch.load(checkpoint, map_location=device, weights_only=False)[
+                "model_state"
+            ]
+        )
+        model.eval()
+        with torch.no_grad():
+            inputs = torch.from_numpy(image.transpose(0, 3, 1, 2)).to(device)
+            logits = model(inputs).cpu().numpy()
+    else:
+        import tensorflow as tf
+
+        checkpoint = config.results_dir / "tensorflow_best.keras"
+        if not checkpoint.exists():
+            raise FileNotFoundError(f"No checkpoint at {checkpoint}. Run train first.")
+        logits = tf.keras.models.load_model(checkpoint).predict(image, verbose=0)
+    _print_prediction(logits, framework)
+
+
 def parse_arguments() -> argparse.Namespace:
     """Parse the intentionally small experiment CLI."""
     parser = argparse.ArgumentParser(
@@ -141,8 +186,10 @@ def parse_arguments() -> argparse.Namespace:
         "--framework", choices=("pytorch", "tensorflow", "both"), default="pytorch"
     )
     parser.add_argument(
-        "--mode", choices=("explore", "train", "evaluate"), default="explore"
+        "--mode", choices=("explore", "train", "evaluate", "predict"), default="explore"
     )
+    parser.add_argument("--image", type=Path, help="Image to classify with --mode predict.")
+    parser.add_argument("--invert", action="store_true", help="Invert a dark item on a light background.")
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
@@ -167,6 +214,13 @@ def main() -> None:
     if args.mode == "explore":
         set_global_seed(config.seed, "tensorflow")
         explore(config)
+        return
+    if args.mode == "predict":
+        if args.framework == "both":
+            raise ValueError("Choose either pytorch or tensorflow for one prediction.")
+        if args.image is None:
+            raise ValueError("--image is required with --mode predict.")
+        predict_external_image(args.framework, args.image, args.invert, config)
         return
     frameworks = (
         ("pytorch", "tensorflow") if args.framework == "both" else (args.framework,)
