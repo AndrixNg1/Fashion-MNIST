@@ -21,3 +21,14 @@ results/*
 .vscode/
 .DS_Store
 .env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+data/*
+!data/.gitkeep
+results/*
+!results/.gitkeep
+*.pt
+*.keras
