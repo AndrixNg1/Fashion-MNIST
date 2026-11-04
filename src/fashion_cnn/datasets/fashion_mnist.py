@@ -69,9 +69,10 @@ def load_tensorflow_data(
             "TensorFlow is required. Install dependencies from requirements.txt."
         ) from exc
     data_dir.mkdir(parents=True, exist_ok=True)
-    (x_train, y_train), (x_test, y_test) = keras.datasets.fashion_mnist.load_data(
-        path=str(data_dir / "fashion-mnist.npz")
-    )
+    # TensorFlow 2.21 exposes no ``path`` parameter and downloads its current
+    # IDX source files into Keras' cache.  Using its public loader keeps this
+    # compatible with both the installed Keras version and future mirrors.
+    (x_train, y_train), (x_test, y_test) = keras.datasets.fashion_mnist.load_data()
     split = create_split_indices(len(x_train), validation_size, seed)
     x_train = normalise_images(x_train)[..., np.newaxis]
     x_test = normalise_images(x_test)[..., np.newaxis]

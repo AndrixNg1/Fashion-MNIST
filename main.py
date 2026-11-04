@@ -163,9 +163,9 @@ def main() -> None:
         data_dir=args.data_dir,
         results_dir=args.results_dir,
     )
-    set_global_seed(config.seed)
     config.results_dir.mkdir(parents=True, exist_ok=True)
     if args.mode == "explore":
+        set_global_seed(config.seed, "tensorflow")
         explore(config)
         return
     frameworks = (

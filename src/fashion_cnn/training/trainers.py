@@ -56,7 +56,7 @@ def train_pytorch(
     """Train PyTorchCNN, retaining the checkpoint with lowest validation loss."""
     import torch
 
-    set_global_seed(config.seed)
+    set_global_seed(config.seed, "pytorch")
     config.results_dir.mkdir(parents=True, exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = PyTorchCNN().to(device)
@@ -96,7 +96,7 @@ def train_tensorflow(
     """Train the equivalent Keras CNN and save its best validation-loss checkpoint."""
     import tensorflow as tf
 
-    set_global_seed(config.seed)
+    set_global_seed(config.seed, "tensorflow")
     config.results_dir.mkdir(parents=True, exist_ok=True)
     model = build_tensorflow_cnn()
     model.compile(
