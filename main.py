@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+# Support direct execution (``python main.py``) with the project's ``src`` layout.
+SOURCE_DIRECTORY = Path(__file__).resolve().parent / "src"
+if str(SOURCE_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(SOURCE_DIRECTORY))
 
 from fashion_cnn.config import ExperimentConfig
 from fashion_cnn.datasets.fashion_mnist import (
