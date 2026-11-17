@@ -47,6 +47,25 @@ python main.py --framework pytorch --mode evaluate
 python main.py --framework tensorflow --mode evaluate
 ```
 
+### Interface de reconnaissance
+
+L'interface permet d'importer une image, de visualiser l'entrée 28 × 28 réellement
+envoyée aux CNN et de comparer côte à côte la classe, la confiance, les dix
+probabilités et le temps d'inférence de PyTorch et TensorFlow. Deux graphiques
+affichent les probabilités des dix classes et un indicateur **ACCORD/DÉSACCORD**
+compare immédiatement les classes prédites par les deux modèles.
+Les formats PNG, JPG/JPEG/JFIF, WebP, BMP, GIF, TIFF, ICO, PPM et PGM sont acceptés.
+
+Après avoir entraîné au moins un modèle (les checkpoints sont lus dans `results/`) :
+
+```bash
+streamlit run app.py
+```
+
+Si le vêtement est sombre sur un fond clair, activez **Inverser les couleurs**.
+L'interface continue à fonctionner avec un seul checkpoint et indique clairement
+si l'autre modèle n'est pas encore entraîné.
+
 Les paramètres `--epochs`, `--batch-size`, `--learning-rate`, `--validation-size`, `--data-dir` et `--results-dir` sont modifiables. L’exploration nécessite TensorFlow/Keras, car il est utilisé pour télécharger et lire les données sous forme de tableaux.
 
 ## Résultats générés
