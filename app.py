@@ -81,6 +81,108 @@ def predict_tensorflow(batch: np.ndarray) -> tuple[np.ndarray, float, str]:
     return softmax(logits), elapsed_ms, "CPU/GPU TensorFlow"
 
 
+def explain_pytorch(batch: np.ndarray) -> tuple[dict[str, np.ndarray], np.ndarray, int]:
+    """Extract intermediate feature maps and a Grad-CAM from the trained CNN."""
+    import torch
+
+    model, device = load_pytorch_model(str(PYTORCH_CHECKPOINT))
+    inputs = torch.from_numpy(batch.transpose(0, 3, 1, 2)).to(device)
+    activations: dict[str, torch.Tensor] = {}
+
+    def capture(name: str, keep_gradient: bool = False):
+        def hook(_module, _inputs, output):
+            activations[name] = output
+            if keep_gradient:
+                output.retain_grad()
+
+        return hook
+
+    handles = (
+        model.features[0].register_forward_hook(capture("Convolution 1")),
+        model.features[2].register_forward_hook(capture("Max Pooling 1")),
+        model.features[3].register_forward_hook(capture("Convolution 2", True)),
+        model.features[5].register_forward_hook(capture("Max Pooling 2")),
+    )
+    try:
+        model.zero_grad(set_to_none=True)
+        logits = model(inputs)
+        prediction = int(logits.argmax(dim=1).item())
+        logits[0, prediction].backward()
+
+        final_activation = activations["Convolution 2"]
+        gradients = final_activation.grad[0]
+        weights = gradients.mean(dim=(1, 2), keepdim=True)
+        heatmap = torch.relu((weights * final_activation[0]).sum(dim=0))
+        heatmap -= heatmap.min()
+        maximum = heatmap.max()
+        if maximum > 0:
+            heatmap /= maximum
+
+        feature_maps = {
+            name: tensor[0].detach().cpu().numpy()
+            for name, tensor in activations.items()
+        }
+        return feature_maps, heatmap.detach().cpu().numpy(), prediction
+    finally:
+        for handle in handles:
+            handle.remove()
+
+
+def render_architecture() -> None:
+    """Show the spatial journey through the CNN used by both frameworks."""
+    stages = (
+        ("Image", "28 × 28 × 1"),
+        ("Convolution 1", "28 × 28 × 32"),
+        ("Max Pooling 1", "14 × 14 × 32"),
+        ("Convolution 2", "14 × 14 × 64"),
+        ("Max Pooling 2", "7 × 7 × 64"),
+        ("Flatten", "3 136 valeurs"),
+        ("Dense", "128 → 10"),
+        ("Sortie", "Classe prédite"),
+    )
+    cards = "".join(
+        f"<div style='min-width:125px;flex:1;padding:12px;margin:4px;"
+        f"border:1px solid #6c63ff;border-radius:10px;text-align:center'>"
+        f"<strong>{name}</strong><br><small>{shape}</small></div>"
+        + ("<div style='align-self:center;font-size:22px'>→</div>" if index < len(stages) - 1 else "")
+        for index, (name, shape) in enumerate(stages)
+    )
+    st.markdown(f"<div style='display:flex;flex-wrap:wrap;align-items:stretch'>{cards}</div>", unsafe_allow_html=True)
+
+
+def render_feature_maps(feature_maps: dict[str, np.ndarray]) -> None:
+    """Render a representative sample of channels for every CNN feature stage."""
+    import matplotlib.pyplot as plt
+
+    tabs = st.tabs(list(feature_maps))
+    for tab, (name, maps) in zip(tabs, feature_maps.items(), strict=True):
+        with tab:
+            shown = min(8, maps.shape[0])
+            figure, axes = plt.subplots(2, 4, figsize=(10, 5))
+            for index, axis in enumerate(axes.flat):
+                if index < shown:
+                    axis.imshow(maps[index], cmap="viridis")
+                    axis.set_title(f"Canal {index + 1}")
+                axis.axis("off")
+            figure.suptitle(f"{name} — {maps.shape[1]} × {maps.shape[2]} × {maps.shape[0]}")
+            figure.tight_layout()
+            st.pyplot(figure, use_container_width=True)
+            plt.close(figure)
+
+
+def gradcam_overlay(image: Image.Image, heatmap: np.ndarray) -> Image.Image:
+    """Blend the Grad-CAM heatmap over the exact grayscale CNN input."""
+    import matplotlib.pyplot as plt
+
+    resized = Image.fromarray(heatmap.astype(np.float32), mode="F").resize(
+        image.size, Image.Resampling.BILINEAR
+    )
+    normalized = np.asarray(resized, dtype=np.float32)
+    colors = plt.get_cmap("jet")(normalized)[..., :3]
+    colored = Image.fromarray(np.uint8(colors * 255), mode="RGB")
+    return Image.blend(image.convert("RGB"), colored, alpha=0.48)
+
+
 def render_result(title: str, result: tuple[np.ndarray, float, str]) -> None:
     probabilities, elapsed_ms, device = result
     prediction = int(probabilities.argmax())
@@ -200,6 +302,58 @@ else:
                     else:
                         st.subheader(name)
                         st.error(errors.get(name, "Modèle indisponible."))
+
+            st.divider()
+            st.header("Bonus 2 — À l’intérieur du CNN")
+            st.write(
+                "Suivez l’image dans le réseau et observez les caractéristiques "
+                "détectées par les convolutions et conservées par le max pooling."
+            )
+            render_architecture()
+            if "PyTorch" in outputs:
+                try:
+                    with st.spinner("Calcul des activations et de Grad-CAM…"):
+                        feature_maps, heatmap, explained_class = explain_pytorch(batch)
+                    st.subheader("Visualisation des convolutions et du max pooling")
+                    st.caption(
+                        "Huit canaux représentatifs sont affichés à chaque étape. "
+                        "Les zones claires correspondent aux réponses les plus fortes."
+                    )
+                    render_feature_maps(feature_maps)
+
+                    st.divider()
+                    st.header("Bonus 3 — Explication Grad-CAM")
+                    st.write(
+                        f"La carte de chaleur montre les régions utilisées par PyTorch "
+                        f"pour prédire **{CLASS_NAMES[explained_class]}**."
+                    )
+                    source_col, map_col, overlay_col = st.columns(3)
+                    source_col.image(
+                        processed.resize((280, 280)),
+                        caption="Entrée du CNN",
+                        use_container_width=True,
+                    )
+                    map_col.image(
+                        Image.fromarray(np.uint8(heatmap * 255)).resize((280, 280)),
+                        caption="Carte Grad-CAM",
+                        use_container_width=True,
+                    )
+                    overlay_col.image(
+                        gradcam_overlay(processed, heatmap).resize((280, 280)),
+                        caption="Zones importantes superposées",
+                        use_container_width=True,
+                    )
+                    st.caption(
+                        "Rouge/jaune : influence forte sur la classe prédite. "
+                        "Bleu : influence faible."
+                    )
+                except Exception as exc:
+                    st.error(f"Impossible de produire les explications PyTorch : {exc}")
+            else:
+                st.info(
+                    "Entraînez le modèle PyTorch pour afficher les cartes "
+                    "d’activation et Grad-CAM."
+                )
 
     except Exception as exc:
         st.error(f"Impossible de lire cette image : {exc}")

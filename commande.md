@@ -54,7 +54,9 @@ http://localhost:8501
 
 Elle permet d'importer des images, notamment au format JFIF, de comparer les
 prédictions PyTorch et TensorFlow, d'afficher les probabilités des dix classes
-et de vérifier si les deux modèles sont d'accord.
+et de vérifier si les deux modèles sont d'accord. Elle affiche également les
+activations des convolutions et du max pooling ainsi qu'une explication Grad-CAM
+de la prédiction PyTorch, sans commande supplémentaire.
 
 ## 5. Lancer les tests
 

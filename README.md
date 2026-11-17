@@ -55,6 +55,10 @@ probabilités et le temps d'inférence de PyTorch et TensorFlow. Deux graphiques
 affichent les probabilités des dix classes et un indicateur **ACCORD/DÉSACCORD**
 compare immédiatement les classes prédites par les deux modèles.
 Les formats PNG, JPG/JPEG/JFIF, WebP, BMP, GIF, TIFF, ICO, PPM et PGM sont acceptés.
+L'interface présente aussi le parcours dimensionnel complet de l'image dans le
+CNN, les cartes d'activation des deux convolutions et des deux max poolings,
+ainsi qu'une carte Grad-CAM expliquant les zones qui influencent la prédiction
+PyTorch.
 
 Après avoir entraîné au moins un modèle (les checkpoints sont lus dans `results/`) :
 
